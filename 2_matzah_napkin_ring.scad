@@ -1,174 +1,228 @@
 // ============================================================
-// Passover Matzah Napkin Ring
-// A textured band that mimics the look of matzah (unleavened
-// bread) with realistic dimple perforations, score line channels,
-// and slightly organic wavy edges like torn flatbread.
-// Designed for FDM 3D printing (print upright, no supports).
+// Passover Matzah Napkin Ring - Flat Silhouette Style
+// A flat matzah (unleavened bread) shape with the napkin ring
+// hole in the center. Features realistic perforations, score
+// lines dividing it into sections, and slightly irregular
+// organic edges like real handmade matzah.
+// Print flat on bed, no supports needed. ~5mm thick.
 // ============================================================
 
-$fn = 120;
+$fn = 200;
 
-// --- Parameters ---
-ring_inner_r = 21;
-wall = 3.0;             // slightly thicker to accommodate texture
-ring_outer_r = ring_inner_r + wall;
-band_height = 26;
+// --- Core Parameters ---
+ring_hole_r = 19;          // napkin hole radius (38mm diameter)
+thickness = 5;             // main body thickness
+relief_h = 0.8;            // raised score line height
+score_depth = 1.0;         // score line depth from top
 
-// Texture parameters
-dimple_r = 0.9;         // perforation dimple radius
-dimple_depth = 1.2;     // how deep dimples go (not through-holes)
-dimple_rows = 5;
-dimple_cols = 28;
+// Matzah dimensions
+matzah_w = 58;             // width
+matzah_h = 52;             // height
+corner_r = 5;              // corner rounding
 
-score_depth = 0.6;      // score line channel depth
-score_width = 0.5;
-num_score_lines = 3;
+// Perforation parameters
+perf_r = 1.1;              // perforation hole radius
+perf_rows = 7;
+perf_cols = 8;
+perf_spacing_x = 6.2;
+perf_spacing_y = 6.0;
 
-wave_amplitude = 1.5;   // edge waviness
-wave_freq = 8;          // number of waves around circumference
+// Score line parameters
+num_h_scores = 3;          // horizontal score lines
+num_v_scores = 3;          // vertical score lines
+score_line_w = 0.8;        // width of score lines
 
-// --- Wavy-edged ring body ---
-// Creates a ring with organic wavy top and bottom edges
-module wavy_ring() {
-    num_slices = 180;
-    step = 360 / num_slices;
+// Edge irregularity
+edge_bumps = 30;           // number of bumps on edge
+bump_amplitude = 1.2;      // how bumpy the edge is
 
+// --- Organic irregular matzah outline (2D) ---
+module matzah_outline_2d() {
+    // Start with a rounded rectangle, then add irregularity
+    // We build it from a hull of circles placed with slight offsets
+
+    // Base rounded rectangle with organic bumps
+    offset(r = 2)
+    offset(r = -2)  // smooth any sharp corners
     difference() {
         union() {
-            for (i = [0:num_slices - 1]) {
-                a1 = i * step;
-                a2 = (i + 1) * step;
+            // Core rounded rectangle
+            offset(r = corner_r)
+                square([matzah_w - 2 * corner_r, matzah_h - 2 * corner_r], center = true);
 
-                // Wavy top edge
-                top1 = band_height + wave_amplitude * sin(a1 * wave_freq);
-                top2 = band_height + wave_amplitude * sin(a2 * wave_freq);
-                // Wavy bottom edge
-                bot1 = -wave_amplitude * sin(a1 * wave_freq + 45);
-                bot2 = -wave_amplitude * sin(a2 * wave_freq + 45);
-
-                hull() {
-                    rotate([0, 0, a1])
-                        translate([ring_inner_r + wall / 2, 0, 0])
-                            cylinder(r = wall / 2, h = max(0.01, top1 - bot1));
-
-                    rotate([0, 0, a2])
-                        translate([ring_inner_r + wall / 2, 0, 0])
-                            cylinder(r = wall / 2, h = max(0.01, top2 - bot2));
-                }
+            // Organic edge bumps for "handmade" feel
+            for (i = [0:edge_bumps - 1]) {
+                angle = i * 360 / edge_bumps;
+                // Distribute bumps along the rectangular perimeter
+                px = (matzah_w / 2 + bump_amplitude * 0.5) * cos(angle);
+                py = (matzah_h / 2 + bump_amplitude * 0.5) * sin(angle);
+                // Clamp to edge
+                cx = max(-matzah_w / 2 - bump_amplitude, min(matzah_w / 2 + bump_amplitude, px));
+                cy = max(-matzah_h / 2 - bump_amplitude, min(matzah_h / 2 + bump_amplitude, py));
+                amplitude = bump_amplitude * (0.5 + 0.5 * sin(i * 137.5));
+                translate([cx, cy])
+                    circle(r = amplitude + 1.5);
             }
         }
-        // Hollow out the inside
-        translate([0, 0, -wave_amplitude - 1])
-            cylinder(r = ring_inner_r, h = band_height + 4 * wave_amplitude + 2);
+        // Nothing to subtract from outline
     }
 }
 
-// --- Simpler approach: cylinder with wavy trim ---
-module matzah_body() {
+// --- Perforation holes grid (2D) ---
+module perforations_2d() {
+    // Offset grid of holes, avoiding the center ring hole
+    for (row = [0:perf_rows - 1]) {
+        for (col = [0:perf_cols - 1]) {
+            x = (col - (perf_cols - 1) / 2) * perf_spacing_x;
+            y = (row - (perf_rows - 1) / 2) * perf_spacing_y;
+
+            // Offset every other row
+            x_off = x + (row % 2) * perf_spacing_x * 0.5;
+
+            // Only place if outside the ring hole (with margin)
+            dist = sqrt(x_off * x_off + y * y);
+            if (dist > ring_hole_r + 3 && dist < matzah_w / 2 - 4) {
+                translate([x_off, y])
+                    circle(r = perf_r);
+            }
+        }
+    }
+}
+
+// --- Score lines (2D) - dividing lines across the matzah ---
+module score_lines_h_2d() {
+    // Horizontal score lines with slight waviness
+    for (i = [1:num_h_scores]) {
+        y_pos = -matzah_h / 2 + i * matzah_h / (num_h_scores + 1);
+
+        // Build wavy line from small segments
+        for (x = [-matzah_w / 2 + 3 : 1 : matzah_w / 2 - 3]) {
+            wave = 0.3 * sin(x * 8 + i * 45);
+            dist = sqrt(x * x + (y_pos + wave) * (y_pos + wave));
+
+            // Skip where line would cross the ring hole
+            if (dist > ring_hole_r + 2) {
+                translate([x, y_pos + wave])
+                    square([1.2, score_line_w], center = true);
+            }
+        }
+    }
+}
+
+module score_lines_v_2d() {
+    // Vertical score lines with slight waviness
+    for (i = [1:num_v_scores]) {
+        x_pos = -matzah_w / 2 + i * matzah_w / (num_v_scores + 1);
+
+        for (y = [-matzah_h / 2 + 3 : 1 : matzah_h / 2 - 3]) {
+            wave = 0.3 * sin(y * 8 + i * 60);
+            dist = sqrt((x_pos + wave) * (x_pos + wave) + y * y);
+
+            if (dist > ring_hole_r + 2) {
+                translate([x_pos + wave, y])
+                    square([score_line_w, 1.2], center = true);
+            }
+        }
+    }
+}
+
+// --- Blistered/bubbly surface texture ---
+module blister_texture_2d() {
+    // Scattered small circles representing the bubbly surface
+    // Using golden angle distribution for natural-looking scatter
+    num_blisters = 60;
+    for (i = [0:num_blisters - 1]) {
+        angle = i * 137.508;
+        r = 5 + sqrt(i) * 4.5;
+        x = r * cos(angle);
+        y = r * sin(angle) * 0.85; // slightly compressed vertically
+
+        dist = sqrt(x * x + y * y);
+        if (dist > ring_hole_r + 3.5 &&
+            abs(x) < matzah_w / 2 - 4 &&
+            abs(y) < matzah_h / 2 - 4) {
+            blister_r = 0.8 + 0.6 * sin(i * 73);
+            translate([x, y])
+                circle(r = blister_r);
+        }
+    }
+}
+
+// --- Brown spots / bake marks (larger flat circles as relief) ---
+module bake_marks_2d() {
+    marks = [
+        [-18, 14, 2.5], [15, -16, 3.0], [-20, -12, 2.2],
+        [22, 10, 2.8], [-8, 20, 2.0], [10, 18, 1.8],
+        [-15, -20, 2.4], [25, -5, 2.0], [-25, 5, 1.9]
+    ];
+    for (m = marks) {
+        dist = sqrt(m[0] * m[0] + m[1] * m[1]);
+        if (dist > ring_hole_r + 4) {
+            translate([m[0], m[1]])
+                circle(r = m[2]);
+        }
+    }
+}
+
+// --- Ring hole reinforcement rim (2D) ---
+module ring_rim_2d() {
     difference() {
-        // Base cylinder
-        cylinder(r = ring_outer_r, h = band_height);
-
-        // Hollow interior
-        translate([0, 0, -1])
-            cylinder(r = ring_inner_r, h = band_height + 2);
-
-        // Wavy top trim
-        for (i = [0:359]) {
-            wave_z = band_height - wave_amplitude + wave_amplitude * sin(i * wave_freq);
-            rotate([0, 0, i])
-                translate([ring_inner_r - 1, -0.5, wave_z])
-                    cube([wall + 2, 1, wave_amplitude * 2 + 1]);
-        }
-
-        // Wavy bottom trim
-        for (i = [0:359]) {
-            wave_z = wave_amplitude * sin(i * wave_freq + 180);
-            rotate([0, 0, i])
-                translate([ring_inner_r - 1, -0.5, -wave_amplitude - 0.5])
-                    cube([wall + 2, 1, wave_amplitude + 0.5 + max(0, wave_z)]);
-        }
+        circle(r = ring_hole_r + 2);
+        circle(r = ring_hole_r);
     }
 }
 
-// --- Dimple perforations (indentations, not through-holes) ---
-module dimple_grid() {
-    for (row = [0:dimple_rows - 1]) {
-        z_pos = 4 + row * (band_height - 8) / max(1, dimple_rows - 1);
-        for (col = [0:dimple_cols - 1]) {
-            angle = col * 360 / dimple_cols + (row % 2) * (180 / dimple_cols);
-            rotate([0, 0, angle])
-                translate([ring_outer_r - dimple_depth + 0.3, 0, z_pos])
-                    rotate([0, 90, 0])
-                        cylinder(r1 = dimple_r, r2 = dimple_r * 0.3,
-                                 h = dimple_depth);
-        }
-    }
-}
+// ========================================
+// ASSEMBLY
+// ========================================
 
-// --- Score line channels ---
-module score_lines() {
-    for (i = [0:num_score_lines - 1]) {
-        z_pos = 3 + (i + 0.5) * (band_height - 6) / num_score_lines;
-        difference() {
-            // Slightly larger cylinder to cut into outer surface
-            cylinder(r = ring_outer_r + 0.1, h = score_width, $fn = 120);
-            // Remove inner portion (keep only outer shell cut)
-            cylinder(r = ring_outer_r - score_depth, h = score_width + 1, $fn = 120);
-            // Also keep interior clear
-            translate([0, 0, -0.5])
-                cylinder(r = ring_inner_r + 0.5, h = score_width + 1);
-        }
-    }
-}
-
-// --- Light surface grain texture ---
-module grain_bumps() {
-    // Small random-looking bumps for bread texture
-    for (i = [0:80]) {
-        // Pseudo-random placement using modular arithmetic
-        angle = (i * 137.5) % 360;  // golden angle distribution
-        z = 2 + ((i * 7 + 3) % (band_height - 4));
-        bump_r = 0.3 + (i % 3) * 0.15;
-
-        rotate([0, 0, angle])
-            translate([ring_outer_r - 0.1, 0, z])
-                sphere(r = bump_r);
-    }
-}
-
-// --- Assembly ---
-union() {
-    difference() {
-        union() {
-            matzah_body();
-            grain_bumps();
-        }
-        // Cut dimples
-        dimple_grid();
-    }
-    // Score lines are additive (raised ridges between sections)
-    // Actually, make them cuts into the surface
-}
-
-// Final: subtract score lines as channels
+// Main matzah body
 difference() {
     union() {
+        // Base matzah slab
+        linear_extrude(height = thickness)
         difference() {
-            union() {
-                matzah_body();
-                grain_bumps();
-            }
-            dimple_grid();
+            matzah_outline_2d();
+            circle(r = ring_hole_r);
         }
+
+        // Raised ring reinforcement rim
+        translate([0, 0, thickness])
+            linear_extrude(height = relief_h)
+                ring_rim_2d();
+
+        // Raised bake mark spots (subtle surface texture)
+        translate([0, 0, thickness])
+            linear_extrude(height = 0.4)
+                intersection() {
+                    bake_marks_2d();
+                    difference() {
+                        matzah_outline_2d();
+                        circle(r = ring_hole_r + 2.5);
+                    }
+                }
     }
-    // Score line channels
-    for (i = [0:num_score_lines - 1]) {
-        z_pos = 3 + (i + 0.5) * (band_height - 6) / num_score_lines;
-        translate([0, 0, z_pos - score_width / 2])
-        difference() {
-            cylinder(r = ring_outer_r + 0.1, h = score_width);
-            cylinder(r = ring_outer_r - score_depth, h = score_width + 0.1);
+
+    // Cut perforations all the way through
+    translate([0, 0, -1])
+        linear_extrude(height = thickness + relief_h + 2)
+            perforations_2d();
+
+    // Cut score lines as channels from the top
+    translate([0, 0, thickness - score_depth])
+        linear_extrude(height = score_depth + relief_h + 1) {
+            score_lines_h_2d();
+            score_lines_v_2d();
         }
-    }
 }
+
+// Blister texture on bottom (very subtle raised dots)
+translate([0, 0, 0])
+    linear_extrude(height = 0.3)
+        intersection() {
+            blister_texture_2d();
+            difference() {
+                offset(r = -1) matzah_outline_2d();
+                circle(r = ring_hole_r + 1);
+            }
+        }

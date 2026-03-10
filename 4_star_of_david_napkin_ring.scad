@@ -1,159 +1,257 @@
 // ============================================================
-// Passover Star of David Napkin Ring
-// An elegant wide band with Star of David filigree cutouts,
-// decorative bead borders, and proper structural framing.
-// The stars are cleanly cut through the wall with thin
-// bridging frames between them.
-// Designed for FDM 3D printing (print upright, no supports).
+// Passover Star of David Napkin Ring - Flat Silhouette Style
+// A large Star of David (hexagram) outline as the flat shape,
+// with the napkin ring hole in the center hexagonal area.
+// Features intricate filigree patterns within the triangle
+// sections, decorative borders, and fine geometric details.
+// Print flat on bed, no supports needed. ~5mm thick.
 // ============================================================
 
-$fn = 120;
+$fn = 200;
 
-// --- Parameters ---
-ring_inner_r = 21;
-wall = 3.0;              // thicker wall for structural cutouts
-ring_outer_r = ring_inner_r + wall;
-band_height = 32;
+// --- Core Parameters ---
+ring_hole_r = 19;          // napkin hole radius (38mm diameter)
+thickness = 5;             // main body thickness
+relief_h = 1.0;            // raised detail height
 
-// Star parameters
-num_stars = 6;
-star_size = 7.5;         // outer radius of star
-star_line_w = 1.2;       // width of star outline (hollow star)
+// Star dimensions
+star_outer_r = 42;         // outer radius of star points
+star_inner_r = 24;         // inner hexagon radius (where triangles meet)
+frame_width = 4;           // width of the star frame/outline
+point_rounding = 1.5;      // rounding on star points
 
-// Border parameters
-border_h = 3.5;          // height of top/bottom decorative border
-bead_r = 0.8;
-num_beads = 40;
+// --- Star of David outline (2D) ---
+// Two overlapping equilateral triangles forming a hexagram
 
-// --- Molded ring body with decorative profile ---
-module ring_body() {
-    rotate_extrude(convexity = 4)
+module triangle_2d(r) {
     polygon(points = [
-        // Inner wall
-        [ring_inner_r, 0],
-        // Bottom border - stepped profile
-        [ring_outer_r + 0.8, 0],           // base lip
-        [ring_outer_r + 0.8, 0.8],
-        [ring_outer_r + 0.3, 1.2],
-        [ring_outer_r + 0.3, border_h - 0.5],
-        [ring_outer_r + 0.6, border_h],     // border top ridge
-        [ring_outer_r, border_h + 0.3],
-        // Main band
-        [ring_outer_r, band_height - border_h - 0.3],
-        // Top border
-        [ring_outer_r + 0.6, band_height - border_h],
-        [ring_outer_r + 0.3, band_height - border_h + 0.5],
-        [ring_outer_r + 0.3, band_height - 1.2],
-        [ring_outer_r + 0.8, band_height - 0.8],
-        [ring_outer_r + 0.8, band_height],  // top lip
-        [ring_inner_r, band_height]
+        for (i = [0:2])
+            [r * cos(90 + i * 120), r * sin(90 + i * 120)]
     ]);
 }
 
-// --- Star of David 2D outline (hollow for filigree look) ---
-module star_of_david_2d(size, line_w) {
+module hexagram_solid_2d(r) {
+    triangle_2d(r);
+    rotate(60) triangle_2d(r);
+}
+
+module hexagram_outline_2d(outer_r, width) {
     difference() {
-        // Solid star
-        star_of_david_solid(size);
-        // Inner cutout (smaller star offset)
-        star_of_david_solid(size - line_w * 1.8);
+        offset(r = point_rounding)
+        offset(r = -point_rounding)
+            hexagram_solid_2d(outer_r);
+
+        offset(r = point_rounding)
+        offset(r = -point_rounding)
+            hexagram_solid_2d(outer_r - width * 1.6);
     }
 }
 
-module star_of_david_solid(size) {
-    // Two overlapping equilateral triangles
-    // Upward pointing
-    polygon(points = [
-        for (i = [0:2])
-            [size * cos(90 + i * 120), size * sin(90 + i * 120)]
-    ]);
-    // Downward pointing
-    polygon(points = [
-        for (i = [0:2])
-            [size * cos(-90 + i * 120), size * sin(-90 + i * 120)]
-    ]);
-}
-
-// --- Full solid star for through-cutouts ---
-module star_of_david_cutout_solid(size) {
-    // Slightly oversized solid star for clean cuts
-    polygon(points = [
-        for (i = [0:2])
-            [size * cos(90 + i * 120), size * sin(90 + i * 120)]
-    ]);
-    polygon(points = [
-        for (i = [0:2])
-            [size * cos(-90 + i * 120), size * sin(-90 + i * 120)]
-    ]);
-}
-
-// --- Star cutout through the wall ---
-module star_cutouts() {
-    mid_z = band_height / 2;
-
-    for (i = [0:num_stars - 1]) {
-        angle = i * 360 / num_stars;
-        rotate([0, 0, angle])
-            translate([ring_outer_r + 1, 0, mid_z])
-                rotate([0, 90, 0])
-                    linear_extrude(height = wall + 3, center = true)
-                        star_of_david_cutout_solid(star_size);
-    }
-}
-
-// --- Star outline frames (raised on surface) ---
-module star_frames() {
-    mid_z = band_height / 2;
-
-    for (i = [0:num_stars - 1]) {
-        angle = i * 360 / num_stars;
-        rotate([0, 0, angle])
-            translate([ring_outer_r - 0.2, 0, mid_z])
-                rotate([0, 90, 0])
-                    linear_extrude(height = 0.8)
-                        star_of_david_2d(star_size + 0.5, star_line_w);
-    }
-}
-
-// --- Bead borders ---
-module bead_border(z_pos) {
-    for (i = [0:num_beads - 1]) {
-        angle = i * 360 / num_beads;
-        rotate([0, 0, angle])
-            translate([ring_outer_r + 0.3, 0, z_pos])
-                sphere(r = bead_r);
-    }
-}
-
-// --- Decorative diamonds between stars ---
-module inter_star_diamonds() {
-    mid_z = band_height / 2;
-
-    for (i = [0:num_stars - 1]) {
-        angle = (i + 0.5) * 360 / num_stars;
-        rotate([0, 0, angle])
-            translate([ring_outer_r + 0.3, 0, mid_z])
-                rotate([0, 90, 0])
-                    linear_extrude(height = 0.6)
-                        rotate([0, 0, 45])
-                            square([3, 3], center = true);
-    }
-}
-
-// --- Assembly ---
-union() {
+// --- Inner hexagonal border around ring hole ---
+module inner_hex_border_2d() {
     difference() {
-        ring_body();
-        star_cutouts();
+        circle(r = ring_hole_r + 3, $fn = 6);
+        circle(r = ring_hole_r);
+    }
+}
+
+// --- Filigree patterns inside the triangle arms ---
+// Each of the 6 triangle "arms" gets a decorative pattern
+
+module arm_filigree_2d(arm_length, arm_width) {
+    // Diamond chain pattern
+    num_diamonds = 3;
+    spacing = arm_length / (num_diamonds + 1);
+
+    for (i = [1:num_diamonds]) {
+        d_size = arm_width * 0.35 * (1 - i * 0.15);
+        translate([0, i * spacing])
+            rotate(45)
+                square([d_size, d_size], center = true);
     }
 
-    // Raised star outlines around the cutouts
-    star_frames();
+    // Connecting line
+    square([0.6, arm_length * 0.8], center = true);
+    translate([0, arm_length * 0.4])
+        square([0.6, arm_length * 0.8], center = true);
+}
 
-    // Bead borders
-    bead_border(border_h / 2);
-    bead_border(band_height - border_h / 2);
+module all_arm_filigrees_2d() {
+    arm_length = star_outer_r - star_inner_r - frame_width;
+    arm_width = frame_width;
 
-    // Small diamonds between stars
-    inter_star_diamonds();
+    for (i = [0:5]) {
+        angle = i * 60 + 30;
+        arm_r = (star_inner_r + star_outer_r) / 2;
+        rotate(angle)
+            translate([0, arm_r - 2])
+                arm_filigree_2d(arm_length * 0.6, arm_width);
+    }
+}
+
+// --- Decorative dots at star points ---
+module point_dots_2d() {
+    dot_r = 1.0;
+    for (i = [0:5]) {
+        angle = i * 60 + 90;
+        r = star_outer_r - frame_width - 1;
+        translate([r * cos(angle), r * sin(angle)])
+            circle(r = dot_r);
+    }
+}
+
+// --- Decorative dots at inner hex vertices ---
+module hex_vertex_dots_2d() {
+    dot_r = 0.8;
+    for (i = [0:5]) {
+        angle = i * 60;
+        r = ring_hole_r + 4.5;
+        translate([r * cos(angle), r * sin(angle)])
+            circle(r = dot_r);
+    }
+}
+
+// --- Small Stars of David at each point ---
+module mini_star_2d(size) {
+    hexagram_solid_2d(size);
+}
+
+module point_mini_stars_2d() {
+    for (i = [0:5]) {
+        angle = i * 60 + 90;
+        r = star_outer_r - frame_width * 1.5 - 2;
+        translate([r * cos(angle), r * sin(angle)])
+            mini_star_2d(2.2);
+    }
+}
+
+// --- Ornamental curves in the concave sections between points ---
+module concave_ornaments_2d() {
+    for (i = [0:5]) {
+        angle = i * 60 + 60;
+        r = star_inner_r + 1;
+        translate([r * cos(angle), r * sin(angle)])
+            rotate(angle)
+                ornament_scroll_2d(5);
+    }
+}
+
+module ornament_scroll_2d(size) {
+    // Small scroll/flourish
+    difference() {
+        circle(r = size * 0.4);
+        circle(r = size * 0.25);
+        translate([-size, 0])
+            square([size * 2, size], center = false);
+    }
+    mirror([0, 1, 0])
+    difference() {
+        circle(r = size * 0.4);
+        circle(r = size * 0.25);
+        translate([-size, 0])
+            square([size * 2, size], center = false);
+    }
+}
+
+// --- Outer border ring of tiny dots ---
+module outer_dot_ring_2d() {
+    num_dots = 48;
+    for (i = [0:num_dots - 1]) {
+        angle = i * 360 / num_dots;
+        // Place dots just outside the inner hexagon
+        r = star_inner_r - 1;
+        translate([r * cos(angle), r * sin(angle)])
+            circle(r = 0.4);
+    }
+}
+
+// --- Inner dot ring around napkin hole ---
+module inner_dot_ring_2d() {
+    num_dots = 30;
+    for (i = [0:num_dots - 1]) {
+        angle = i * 360 / num_dots;
+        r = ring_hole_r + 1.5;
+        translate([r * cos(angle), r * sin(angle)])
+            circle(r = 0.35);
+    }
+}
+
+// --- Connecting bridges between star frame and inner hex ---
+module bridges_2d() {
+    for (i = [0:5]) {
+        angle = i * 60;
+        // Radial bridge
+        rotate(angle)
+            translate([0, ring_hole_r + 3])
+                square([1.5, star_inner_r - ring_hole_r - frame_width + 1], center = false);
+    }
+}
+
+// ========================================
+// ASSEMBLY
+// ========================================
+
+// Main star body
+difference() {
+    union() {
+        // Base star slab
+        linear_extrude(height = thickness)
+        difference() {
+            union() {
+                hexagram_outline_2d(star_outer_r, frame_width);
+                inner_hex_border_2d();
+                bridges_2d();
+            }
+            // Napkin ring hole
+            circle(r = ring_hole_r);
+        }
+
+        // Raised details on top face
+
+        // Mini stars at points
+        translate([0, 0, thickness])
+            linear_extrude(height = relief_h)
+                intersection() {
+                    point_mini_stars_2d();
+                    hexagram_solid_2d(star_outer_r - 1);
+                }
+
+        // Filigree in arms
+        translate([0, 0, thickness])
+            linear_extrude(height = relief_h * 0.8)
+                intersection() {
+                    all_arm_filigrees_2d();
+                    difference() {
+                        hexagram_solid_2d(star_outer_r - 2);
+                        hexagram_solid_2d(star_outer_r - frame_width * 1.6 - 1);
+                    }
+                }
+
+        // Dot decorations
+        translate([0, 0, thickness])
+            linear_extrude(height = relief_h * 0.7) {
+                point_dots_2d();
+                hex_vertex_dots_2d();
+                outer_dot_ring_2d();
+                inner_dot_ring_2d();
+            }
+
+        // Concave ornaments
+        translate([0, 0, thickness])
+            linear_extrude(height = relief_h * 0.6)
+                concave_ornaments_2d();
+
+        // Raised ring hole rim
+        translate([0, 0, thickness])
+            linear_extrude(height = relief_h) {
+                difference() {
+                    circle(r = ring_hole_r + 1.5);
+                    circle(r = ring_hole_r);
+                }
+            }
+    }
+
+    // Clean napkin hole
+    translate([0, 0, -1])
+        cylinder(r = ring_hole_r, h = thickness + relief_h + 2);
 }
