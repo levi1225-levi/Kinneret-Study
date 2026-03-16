@@ -11,6 +11,7 @@ import {
   loadAppData,
   saveAppData,
   getDefaultSettings,
+  getDefaultProfile,
 } from '../lib/storage';
 import {
   calculateXPForReview,
@@ -60,43 +61,35 @@ interface AppStore {
   setActiveTab: (tab: AppStore['activeTab']) => void;
   setStudyMode: (mode: AppStore['studyMode']) => void;
 
-  // Flashcard actions
   startFlashcardSession: () => void;
   flipCard: () => void;
   gradeCard: (grade: SM2Grade) => void;
   nextCard: () => void;
   endSession: () => void;
 
-  // Quiz actions
   startQuizSession: () => void;
   answerQuiz: (questionIndex: number, selectedIndex: number, correct: boolean, timeMs: number) => void;
   endQuizSession: () => void;
 
-  // Speed round actions
   startSpeedRound: () => void;
   speedAnswer: (correct: boolean) => void;
   endSpeedRound: () => void;
 
-  // Settings
   updateSettings: (settings: Partial<UserSettings>) => void;
   updateProfile: (profile: Partial<AppData['profile']>) => void;
   resetProgress: () => void;
   exportData: () => string;
 
-  // AI
   toggleAITutor: () => void;
   sendAITutorMessage: (message: string) => void;
   setAIInsight: (insight: string) => void;
 
-  // Toast/notifications
   addToast: (toast: Omit<AppStore['toasts'][0], 'id'>) => void;
   removeToast: (id: string) => void;
   dismissLevelUp: () => void;
 
-  // Streak
   updateStreak: () => void;
 
-  // Helpers
   getDueCardCount: () => number;
   getMasteredCount: () => number;
   getCardState: (cardId: string) => CardState;
@@ -110,52 +103,53 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-function isSameDay(a: number, b: number): boolean {
-  const da = new Date(a);
-  const db = new Date(b);
-  return (
-    da.getFullYear() === db.getFullYear() &&
-    da.getMonth() === db.getMonth() &&
-    da.getDate() === db.getDate()
-  );
+function todayStr(): string {
+  return new Date().toISOString().split('T')[0];
 }
 
-function isYesterday(timestamp: number): boolean {
+function isSameDayStr(a: string, b: string): boolean {
+  return a.slice(0, 10) === b.slice(0, 10);
+}
+
+function isYesterdayStr(dateStr: string): boolean {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const d = new Date(timestamp);
-  return (
-    d.getFullYear() === yesterday.getFullYear() &&
-    d.getMonth() === yesterday.getMonth() &&
-    d.getDate() === yesterday.getDate()
-  );
+  return dateStr.slice(0, 10) === yesterday.toISOString().split('T')[0];
 }
 
-function startOfToday(): number {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return now.getTime();
+function createEmptySession(mode: StudySession['mode']): StudySession {
+  return {
+    id: generateId(),
+    startTime: new Date().toISOString(),
+    endTime: null,
+    mode,
+    cardsStudied: [],
+    correctCount: 0,
+    incorrectCount: 0,
+    averageTime: 0,
+    xpEarned: 0,
+  };
 }
 
-const defaultData: AppData = {
-  cardStates: {},
-  sessions: [],
-  settings: getDefaultSettings(),
-  profile: {
-    totalXP: 0,
-    streak: 0,
-    longestStreak: 0,
-    lastStudyDate: 0,
-    achievements: [],
-  },
-};
+// Build a proper default AppData matching the storage interface
+function buildDefaultData(): AppData {
+  return {
+    version: 1,
+    userId: generateId(),
+    profile: getDefaultProfile(),
+    cardStates: Object.fromEntries(
+      CARDS.map((c) => [c.id, createInitialCardState(c.id)])
+    ),
+    sessions: [],
+    aiCache: {},
+    settings: getDefaultSettings(),
+  };
+}
 
 export const useAppStore = create<AppStore>((set, get) => ({
-  // Data
-  data: defaultData,
+  data: buildDefaultData(),
   initialized: false,
 
-  // Current session state
   currentSession: null,
   currentCardIndex: 0,
   studyQueue: [],
@@ -163,20 +157,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
   sessionStartTime: 0,
   cardStartTime: 0,
 
-  // Quiz state
   quizAnswers: {},
 
-  // Speed round state
   speedScore: 0,
   speedCombo: 1,
   speedHighScore: 0,
 
-  // AI state
   aiTutorMessages: [],
   aiTutorLoading: false,
   aiInsight: null,
 
-  // UI state
   activeTab: 'home',
   studyMode: null,
   showSessionComplete: false,
@@ -185,40 +175,53 @@ export const useAppStore = create<AppStore>((set, get) => ({
   showLevelUp: false,
   newLevel: null,
 
-  // Actions
   initialize: () => {
     const data = loadAppData();
-    set({ data, initialized: true });
+
+    // Ensure all card IDs from CARDS exist in cardStates
+    for (const card of CARDS) {
+      if (!data.cardStates[card.id]) {
+        data.cardStates[card.id] = createInitialCardState(card.id);
+      }
+    }
+
+    // Apply dark mode setting
+    if (!data.settings.darkMode) {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+
+    // Load persisted speed high score from sessions
+    const speedSessions = data.sessions.filter((s) => s.mode === 'speed');
+    const speedHighScore = speedSessions.reduce((max, s) => Math.max(max, s.correctCount), 0);
+
+    set({ data, initialized: true, speedHighScore });
     get().updateStreak();
   },
 
-  setActiveTab: (tab) => {
-    set({ activeTab: tab });
-  },
+  setActiveTab: (tab) => set({ activeTab: tab }),
+  setStudyMode: (mode) => set({ studyMode: mode, showSessionComplete: false }),
 
-  setStudyMode: (mode) => {
-    set({ studyMode: mode });
-  },
+  // === FLASHCARD ACTIONS ===
 
-  // Flashcard actions
   startFlashcardSession: () => {
     const { data } = get();
-    const queue = getStudyQueue(data.cardStates, CARDS);
-    const limited = queue.slice(0, data.settings.dailyCardLimit);
+    const queue = getStudyQueue(data.cardStates);
+    const limit = data.settings.dailyCardLimit === 999 ? queue.length : data.settings.dailyCardLimit;
+    const limited = queue.slice(0, limit);
 
-    const session: StudySession = {
-      id: generateId(),
-      mode: 'flashcard',
-      startTime: Date.now(),
-      endTime: 0,
-      cardsStudied: 0,
-      correctCount: 0,
-      incorrectCount: 0,
-      xpEarned: 0,
-    };
+    if (limited.length === 0) {
+      // Add new cards if no due cards
+      const newCards = CARDS
+        .filter((c) => data.cardStates[c.id]?.difficulty === 'new')
+        .slice(0, data.settings.newCardsPerDay)
+        .map((c) => c.id);
+      limited.push(...newCards);
+    }
 
     set({
-      currentSession: session,
+      currentSession: createEmptySession('flashcard'),
       studyQueue: limited,
       currentCardIndex: 0,
       isFlipped: false,
@@ -228,48 +231,36 @@ export const useAppStore = create<AppStore>((set, get) => ({
     });
   },
 
-  flipCard: () => {
-    set({ isFlipped: true });
-  },
+  flipCard: () => set({ isFlipped: true }),
 
   gradeCard: (grade: SM2Grade) => {
     const state = get();
-    const { data, studyQueue, currentCardIndex, currentSession } = state;
-
+    const { data, studyQueue, currentCardIndex, currentSession, cardStartTime } = state;
     if (!currentSession || currentCardIndex >= studyQueue.length) return;
 
     const cardId = studyQueue[currentCardIndex];
-    const currentCardState =
-      data.cardStates[cardId] || createInitialCardState(cardId);
+    const currentCardState = data.cardStates[cardId] || createInitialCardState(cardId);
+    const responseTime = Date.now() - cardStartTime;
 
-    const oldLevel = getLevelInfo(data.profile.totalXP).level;
+    const oldLevel = getLevelInfo(data.profile.xp).level;
 
-    // Process the grade through SM2
-    const updatedCardState = processGrade(currentCardState, grade);
+    // Process grade with response time
+    const updatedCardState = processGrade(currentCardState, grade, responseTime);
 
-    // Calculate XP
-    const xpEarned = calculateXPForReview(grade, updatedCardState);
+    // Calculate XP (only takes grade)
+    const xpEarned = calculateXPForReview(grade);
 
-    // Update data
-    const newCardStates = {
-      ...data.cardStates,
-      [cardId]: updatedCardState,
-    };
-
+    const newCardStates = { ...data.cardStates, [cardId]: updatedCardState };
     const newProfile = {
       ...data.profile,
-      totalXP: data.profile.totalXP + xpEarned,
-      lastStudyDate: Date.now(),
+      xp: data.profile.xp + xpEarned,
+      lastStudyDate: new Date().toISOString(),
     };
 
-    const newData: AppData = {
-      ...data,
-      cardStates: newCardStates,
-      profile: newProfile,
-    };
+    const newData: AppData = { ...data, cardStates: newCardStates, profile: newProfile };
 
-    // Check for level up
-    const newLevelInfo = getLevelInfo(newProfile.totalXP);
+    // Check level up
+    const newLevelInfo = getLevelInfo(newProfile.xp);
     let showLevelUp = false;
     let newLevel: number | null = null;
     if (newLevelInfo.level > oldLevel) {
@@ -282,34 +273,30 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const unlockedAchievements = newAchievements.filter(
       (a) => !data.profile.achievements.includes(a)
     );
-    newData.profile.achievements = [
-      ...new Set([...data.profile.achievements, ...newAchievements]),
-    ];
+    newData.profile.achievements = [...new Set([...data.profile.achievements, ...newAchievements])];
+    newData.profile.level = newLevelInfo.level;
 
     // Update session
     const isCorrect = grade >= 3;
     const updatedSession: StudySession = {
       ...currentSession,
-      cardsStudied: currentSession.cardsStudied + 1,
+      cardsStudied: [...currentSession.cardsStudied, cardId],
       correctCount: currentSession.correctCount + (isCorrect ? 1 : 0),
       incorrectCount: currentSession.incorrectCount + (isCorrect ? 0 : 1),
       xpEarned: currentSession.xpEarned + xpEarned,
     };
 
-    // Save to localStorage
     saveAppData(newData);
 
-    // Show XP toast
     if (xpEarned > 0) {
       get().addToast({ message: `+${xpEarned} XP`, type: 'xp' });
     }
 
-    // Show achievement toasts
     for (const achievementId of unlockedAchievements) {
       const achievement = ACHIEVEMENTS.find((a) => a.id === achievementId);
       if (achievement) {
         get().addToast({
-          message: `Achievement: ${achievement.name}`,
+          message: `Achievement: ${achievement.title}`,
           type: 'achievement',
           icon: achievement.icon,
         });
@@ -318,12 +305,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     const isLastCard = currentCardIndex >= studyQueue.length - 1;
 
-    set({
-      data: newData,
-      currentSession: updatedSession,
-      showLevelUp,
-      newLevel,
-    });
+    set({ data: newData, currentSession: updatedSession, showLevelUp, newLevel });
 
     if (isLastCard) {
       get().endSession();
@@ -333,49 +315,53 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   nextCard: () => {
-    set((state) => ({
-      currentCardIndex: state.currentCardIndex + 1,
+    set((s) => ({
+      currentCardIndex: s.currentCardIndex + 1,
       isFlipped: false,
       cardStartTime: Date.now(),
     }));
   },
 
   endSession: () => {
-    const { currentSession, data } = get();
+    const { currentSession, data, sessionStartTime } = get();
     if (!currentSession) return;
+
+    // Calculate average time per card
+    const totalTime = Date.now() - sessionStartTime;
+    const cardCount = currentSession.cardsStudied.length || 1;
+    const avgTime = Math.round(totalTime / cardCount);
+
+    // Calculate session bonus XP
+    const totalAnswered = currentSession.correctCount + currentSession.incorrectCount;
+    const bonusXP = calculateSessionBonusXP(currentSession.correctCount, totalAnswered);
 
     const finalizedSession: StudySession = {
       ...currentSession,
-      endTime: Date.now(),
+      endTime: new Date().toISOString(),
+      averageTime: avgTime,
+      xpEarned: currentSession.xpEarned + bonusXP,
     };
 
-    // Calculate session bonus XP
-    const bonusXP = calculateSessionBonusXP(finalizedSession);
-    finalizedSession.xpEarned += bonusXP;
-
-    // Add session to history (keep last 90)
     const sessions = [...data.sessions, finalizedSession].slice(-90);
 
     const newProfile = {
       ...data.profile,
-      totalXP: data.profile.totalXP + bonusXP,
-      lastStudyDate: Date.now(),
+      xp: data.profile.xp + bonusXP,
+      lastStudyDate: new Date().toISOString(),
+      totalStudyTime: data.profile.totalStudyTime + Math.round(totalTime / 60000),
     };
 
-    // Update streak
-    if (!isSameDay(data.profile.lastStudyDate, Date.now())) {
+    // Update streak if not already studied today
+    const today = todayStr();
+    const lastStudyDay = data.profile.lastStudyDate?.slice(0, 10) || '';
+    if (lastStudyDay !== today) {
       newProfile.streak = (newProfile.streak || 0) + 1;
       if (newProfile.streak > newProfile.longestStreak) {
         newProfile.longestStreak = newProfile.streak;
       }
     }
 
-    const newData: AppData = {
-      ...data,
-      sessions,
-      profile: newProfile,
-    };
-
+    const newData: AppData = { ...data, sessions, profile: newProfile };
     saveAppData(newData);
 
     if (bonusXP > 0) {
@@ -386,25 +372,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
       data: newData,
       currentSession: finalizedSession,
       showSessionComplete: true,
-      studyMode: null,
     });
   },
 
-  // Quiz actions
-  startQuizSession: () => {
-    const session: StudySession = {
-      id: generateId(),
-      mode: 'quiz',
-      startTime: Date.now(),
-      endTime: 0,
-      cardsStudied: 0,
-      correctCount: 0,
-      incorrectCount: 0,
-      xpEarned: 0,
-    };
+  // === QUIZ ACTIONS ===
 
+  startQuizSession: () => {
     set({
-      currentSession: session,
+      currentSession: createEmptySession('quiz'),
       quizAnswers: {},
       sessionStartTime: Date.now(),
       showSessionComplete: false,
@@ -415,45 +390,32 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const { data, currentSession } = get();
     if (!currentSession) return;
 
+    // Try to find the related card via the quiz questions data
     const questionKey = questionIndex.toString();
 
-    // Find the related card for this question
+    // Process the card state if we can find it
     const card = CARDS[questionIndex];
     if (card) {
-      const cardState =
-        data.cardStates[card.id] || createInitialCardState(card.id);
+      const cardState = data.cardStates[card.id] || createInitialCardState(card.id);
       const grade: SM2Grade = correct ? 3 : 0;
-      const updatedCardState = processGrade(cardState, grade);
-      const xpEarned = calculateXPForReview(grade, updatedCardState);
+      const updatedCardState = processGrade(cardState, grade, timeMs);
+      const xpEarned = calculateXPForReview(grade);
 
-      const newCardStates = {
-        ...data.cardStates,
-        [card.id]: updatedCardState,
-      };
-
+      const newCardStates = { ...data.cardStates, [card.id]: updatedCardState };
       const newProfile = {
         ...data.profile,
-        totalXP: data.profile.totalXP + xpEarned,
-        lastStudyDate: Date.now(),
+        xp: data.profile.xp + xpEarned,
+        lastStudyDate: new Date().toISOString(),
       };
 
-      const newData: AppData = {
-        ...data,
-        cardStates: newCardStates,
-        profile: newProfile,
-      };
-
-      // Check achievements
+      const newData: AppData = { ...data, cardStates: newCardStates, profile: newProfile };
       const newAchievements = checkAchievements(newData);
-      newData.profile.achievements = [
-        ...new Set([...data.profile.achievements, ...newAchievements]),
-      ];
-
+      newData.profile.achievements = [...new Set([...data.profile.achievements, ...newAchievements])];
       saveAppData(newData);
 
       const updatedSession: StudySession = {
         ...currentSession,
-        cardsStudied: currentSession.cardsStudied + 1,
+        cardsStudied: [...currentSession.cardsStudied, card.id],
         correctCount: currentSession.correctCount + (correct ? 1 : 0),
         incorrectCount: currentSession.incorrectCount + (correct ? 0 : 1),
         xpEarned: currentSession.xpEarned + xpEarned,
@@ -462,10 +424,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({
         data: newData,
         currentSession: updatedSession,
-        quizAnswers: {
-          ...get().quizAnswers,
-          [questionKey]: { selectedIndex, correct, timeMs },
-        },
+        quizAnswers: { ...get().quizAnswers, [questionKey]: { selectedIndex, correct, timeMs } },
       });
 
       if (xpEarned > 0) {
@@ -473,33 +432,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
     } else {
       set({
-        quizAnswers: {
-          ...get().quizAnswers,
-          [questionKey]: { selectedIndex, correct, timeMs },
-        },
+        quizAnswers: { ...get().quizAnswers, [questionKey]: { selectedIndex, correct, timeMs } },
       });
     }
   },
 
-  endQuizSession: () => {
-    get().endSession();
-  },
+  endQuizSession: () => get().endSession(),
 
-  // Speed round actions
+  // === SPEED ROUND ===
+
   startSpeedRound: () => {
-    const session: StudySession = {
-      id: generateId(),
-      mode: 'speed',
-      startTime: Date.now(),
-      endTime: 0,
-      cardsStudied: 0,
-      correctCount: 0,
-      incorrectCount: 0,
-      xpEarned: 0,
-    };
-
     set({
-      currentSession: session,
+      currentSession: createEmptySession('speed'),
       speedScore: 0,
       speedCombo: 1,
       sessionStartTime: Date.now(),
@@ -525,7 +469,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     const updatedSession: StudySession = {
       ...currentSession,
-      cardsStudied: currentSession.cardsStudied + 1,
+      cardsStudied: [...currentSession.cardsStudied, `speed-${Date.now()}`],
       correctCount: currentSession.correctCount + (correct ? 1 : 0),
       incorrectCount: currentSession.incorrectCount + (correct ? 0 : 1),
     };
@@ -538,17 +482,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
     });
   },
 
-  endSpeedRound: () => {
-    get().endSession();
-  },
+  endSpeedRound: () => get().endSession(),
 
-  // Settings
+  // === SETTINGS ===
+
   updateSettings: (settings) => {
     const { data } = get();
     const newSettings = { ...data.settings, ...settings };
     const newData: AppData = { ...data, settings: newSettings };
 
-    // Apply dark mode
     if (settings.darkMode !== undefined) {
       if (settings.darkMode) {
         document.documentElement.classList.remove('light');
@@ -573,113 +515,80 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const { data } = get();
     const newData: AppData = {
       ...data,
-      cardStates: {},
+      cardStates: Object.fromEntries(
+        CARDS.map((c) => [c.id, createInitialCardState(c.id)])
+      ),
       sessions: [],
+      aiCache: {},
       profile: {
-        totalXP: 0,
-        streak: 0,
-        longestStreak: 0,
-        lastStudyDate: 0,
-        achievements: [],
+        ...getDefaultProfile(),
+        name: data.profile.name,
+        school: data.profile.school,
+        grade: data.profile.grade,
+        testDate: data.profile.testDate,
       },
     };
     saveAppData(newData);
-    set({ data: newData });
+    set({ data: newData, speedHighScore: 0 });
     get().addToast({ message: 'Progress has been reset', type: 'success' });
   },
 
-  exportData: () => {
-    const { data } = get();
-    return JSON.stringify(data, null, 2);
-  },
+  exportData: () => JSON.stringify(get().data, null, 2),
 
-  // AI
-  toggleAITutor: () => {
-    set((state) => ({ showAITutor: !state.showAITutor }));
-  },
+  // === AI ===
+
+  toggleAITutor: () => set((s) => ({ showAITutor: !s.showAITutor })),
 
   sendAITutorMessage: (message) => {
     const { aiTutorMessages } = get();
-    const newMessages = [
-      ...aiTutorMessages,
-      { role: 'user' as const, content: message },
-    ];
-    set({ aiTutorMessages: newMessages, aiTutorLoading: true });
-
-    // AI response will be handled by the component/service that calls this
-    // This just updates the message state
+    set({
+      aiTutorMessages: [...aiTutorMessages, { role: 'user', content: message }],
+      aiTutorLoading: true,
+    });
   },
 
-  setAIInsight: (insight) => {
-    set({ aiInsight: insight });
-  },
+  setAIInsight: (insight) => set({ aiInsight: insight }),
 
-  // Toast/notifications
+  // === TOASTS ===
+
   addToast: (toast) => {
     const id = generateId();
     const fullToast = { ...toast, id };
-    set((state) => ({ toasts: [...state.toasts, fullToast] }));
-
-    // Auto-remove after 3 seconds
-    setTimeout(() => {
-      get().removeToast(id);
-    }, 3000);
+    set((s) => ({ toasts: [...s.toasts, fullToast] }));
+    setTimeout(() => get().removeToast(id), 3000);
   },
 
-  removeToast: (id) => {
-    set((state) => ({
-      toasts: state.toasts.filter((t) => t.id !== id),
-    }));
-  },
+  removeToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
-  dismissLevelUp: () => {
-    set({ showLevelUp: false, newLevel: null });
-  },
+  dismissLevelUp: () => set({ showLevelUp: false, newLevel: null }),
 
-  // Streak
+  // === STREAK ===
+
   updateStreak: () => {
     const { data } = get();
-    const now = Date.now();
     const { lastStudyDate, streak, longestStreak } = data.profile;
 
-    if (!lastStudyDate) {
-      // Never studied before, no changes needed
-      return;
-    }
+    if (!lastStudyDate) return;
 
-    if (isSameDay(lastStudyDate, now)) {
-      // Already studied today, no streak change
-      return;
-    }
+    const today = todayStr();
+    if (isSameDayStr(lastStudyDate, today)) return;
+    if (isYesterdayStr(lastStudyDate)) return; // streak is fine, will increment on next study
 
-    let newStreak = streak;
-
-    if (isYesterday(lastStudyDate)) {
-      // Studied yesterday, streak continues (will increment when they study today)
-      // No change needed here
-      return;
-    }
-
-    // Last study was more than a day ago, reset streak
-    newStreak = 0;
-
-    const newProfile = {
-      ...data.profile,
-      streak: newStreak,
-      longestStreak: Math.max(longestStreak, newStreak),
-    };
-
+    // More than 1 day gap — reset streak
+    const newProfile = { ...data.profile, streak: 0 };
+    // longestStreak stays as-is (it was already recorded)
     const newData: AppData = { ...data, profile: newProfile };
     saveAppData(newData);
     set({ data: newData });
   },
 
-  // Helpers
+  // === HELPERS ===
+
   getDueCardCount: () => {
     const { data } = get();
     return CARDS.filter((card) => {
       const cardState = data.cardStates[card.id];
-      if (!cardState) return true; // New cards are due
+      if (!cardState) return true;
       return isCardDue(cardState);
     }).length;
   },
@@ -687,7 +596,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   getMasteredCount: () => {
     const { data } = get();
     return Object.values(data.cardStates).filter(
-      (cs) => (cs as CardState).interval >= 21
+      (cs) => cs.difficulty === 'mastered'
     ).length;
   },
 
@@ -698,9 +607,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   getTodayXP: () => {
     const { data } = get();
-    const todayStart = startOfToday();
+    const today = todayStr();
     return data.sessions
-      .filter((s) => s.startTime >= todayStart)
+      .filter((s) => s.startTime.slice(0, 10) === today)
       .reduce((sum, s) => sum + s.xpEarned, 0);
   },
 }));

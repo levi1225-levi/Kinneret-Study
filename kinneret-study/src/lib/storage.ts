@@ -96,13 +96,13 @@ export function getDefaultProfile(): AppData['profile'] {
   };
 }
 
+import { CARDS } from '../data/cards';
+
 /**
- * IDs for all 46 cards in the Kinneret study set.
- * These correspond to the card IDs used in the cards data file.
+ * IDs for all cards in the Kinneret study set.
+ * Derived from the actual card data file.
  */
-const ALL_CARD_IDS: string[] = Array.from({ length: 46 }, (_, i) =>
-  String(i + 1)
-);
+const ALL_CARD_IDS: string[] = CARDS.map((c) => c.id);
 
 /**
  * Build the initial card states for all cards.
