@@ -19,7 +19,6 @@ import Button from '../ui/Button';
 type Phase = 'start' | 'playing' | 'gameover';
 
 const ROUND_DURATION = 60; // seconds
-const MAX_COMBO = 3;
 
 interface SpeedCard {
   cardId: string;
@@ -42,7 +41,7 @@ function generateSpeedCard(): SpeedCard {
   if (isCorrectMatch) {
     return {
       cardId: card.id,
-      hebrew: card.hebrew,
+      hebrew: card.hebrew ?? '',
       term: card.term,
       definition: card.definition,
       isCorrectMatch: true,
@@ -57,7 +56,7 @@ function generateSpeedCard(): SpeedCard {
 
   return {
     cardId: card.id,
-    hebrew: card.hebrew,
+    hebrew: card.hebrew ?? '',
     term: card.term,
     definition: other.definition,
     isCorrectMatch: false,
@@ -135,7 +134,6 @@ export default function SpeedRound() {
       }
 
       const score = useAppStore.getState().speedScore;
-      const highScore = useAppStore.getState().speedHighScore;
       const wasNewHigh = score > prevHighScore.current && score > 0;
 
       setFinalScore(score);
@@ -352,7 +350,6 @@ export default function SpeedRound() {
   // ─── Game Over Screen ───
   if (phase === 'gameover') {
     const xpEarned = currentSession?.xpEarned ?? Math.round(finalScore * 2);
-    const maxHistoryScore = scoreHistory.length > 0 ? Math.max(...scoreHistory) : finalScore;
 
     return (
       <motion.div

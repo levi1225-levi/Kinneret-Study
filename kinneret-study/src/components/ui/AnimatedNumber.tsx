@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useMotionValue, useSpring, animate } from 'framer-motion';
+import { animate } from 'framer-motion';
 
 interface AnimatedNumberProps {
   value: number;
@@ -18,12 +18,6 @@ export default function AnimatedNumber({
   className = '',
   decimals = 0,
 }: AnimatedNumberProps) {
-  const motionValue = useMotionValue(0);
-  const springValue = useSpring(motionValue, {
-    stiffness: 100,
-    damping: 30,
-    mass: 1,
-  });
   const ref = useRef<HTMLSpanElement>(null);
   const prevValue = useRef(0);
 
@@ -43,11 +37,6 @@ export default function AnimatedNumber({
 
     return () => controls.stop();
   }, [value, duration, prefix, suffix, decimals]);
-
-  // Keep spring in sync for potential external consumers
-  useEffect(() => {
-    motionValue.set(value);
-  }, [value, motionValue]);
 
   return (
     <span

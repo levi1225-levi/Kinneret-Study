@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, Layers, Zap, ArrowRight } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
@@ -37,7 +37,6 @@ export default function QuizSession() {
     startQuizSession,
     answerQuiz,
     endQuizSession,
-    showSessionComplete,
     setStudyMode,
   } = useAppStore();
 

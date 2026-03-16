@@ -566,7 +566,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   updateStreak: () => {
     const { data } = get();
-    const { lastStudyDate, streak, longestStreak } = data.profile;
+    const { lastStudyDate } = data.profile;
 
     if (!lastStudyDate) return;
 

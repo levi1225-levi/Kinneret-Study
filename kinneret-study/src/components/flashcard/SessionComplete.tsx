@@ -9,7 +9,6 @@ import {
   Target,
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
-import { CARDS } from '../../data/cards';
 
 /* ------------------------------------------------------------------ */
 /*  Animated counter hook                                              */
@@ -214,7 +213,7 @@ const itemFadeUp = {
 /* ------------------------------------------------------------------ */
 
 export function SessionComplete() {
-  const { currentSession, data, endSession, setStudyMode, setActiveTab } =
+  const { currentSession, data, setStudyMode, setActiveTab } =
     useAppStore();
 
   /* ── Derive stats ─────────────────────────────────────────────── */

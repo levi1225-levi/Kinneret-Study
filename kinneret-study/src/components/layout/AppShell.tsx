@@ -20,7 +20,7 @@ const levelTitles: Record<number, string> = {
   6: 'Gaon',
 };
 
-const pageComponents: Record<string, React.LazyExoticComponent<() => JSX.Element>> = {
+const pageComponents: Record<string, React.LazyExoticComponent<() => React.ReactElement>> = {
   home: Dashboard,
   study: StudyHub,
   analytics: Analytics,
