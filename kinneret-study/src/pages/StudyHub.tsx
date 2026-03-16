@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -5,13 +6,16 @@ import {
   HelpCircle,
   Zap,
   BookOpen,
+  GraduationCap,
 } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { FlashcardSession } from '../components/flashcard/FlashcardSession';
 import QuizSession from '../components/quiz/QuizSession';
 import SpeedRound from '../components/speed/SpeedRound';
 
-type StudyModeId = 'flashcard' | 'quiz' | 'speed';
+const GuidedSession = lazy(() => import('../components/guided/GuidedSession'));
+
+type StudyModeId = 'flashcard' | 'quiz' | 'speed' | 'guided';
 
 const MODES: {
   id: StudyModeId;
@@ -20,7 +24,18 @@ const MODES: {
   icon: typeof Layers;
   gradient: string;
   accentColor: string;
+  badge?: string;
 }[] = [
+  {
+    id: 'guided',
+    label: 'Guided Session',
+    description: 'Learn step-by-step with teaching & quizzes',
+    icon: GraduationCap,
+    gradient:
+      'linear-gradient(135deg, rgba(191,90,242,0.18), rgba(79,142,247,0.08))',
+    accentColor: '#bf5af2',
+    badge: 'Recommended',
+  },
   {
     id: 'flashcard',
     label: 'Flashcards',
@@ -28,7 +43,7 @@ const MODES: {
     icon: Layers,
     gradient:
       'linear-gradient(135deg, rgba(79,142,247,0.15), rgba(79,142,247,0.05))',
-    accentColor: 'var(--accent-blue)',
+    accentColor: '#4f8ef7',
   },
   {
     id: 'quiz',
@@ -37,7 +52,7 @@ const MODES: {
     icon: HelpCircle,
     gradient:
       'linear-gradient(135deg, rgba(52,199,89,0.15), rgba(52,199,89,0.05))',
-    accentColor: 'var(--accent-green)',
+    accentColor: '#34c759',
   },
   {
     id: 'speed',
@@ -46,7 +61,7 @@ const MODES: {
     icon: Zap,
     gradient:
       'linear-gradient(135deg, rgba(255,159,10,0.15), rgba(255,159,10,0.05))',
-    accentColor: 'var(--accent-orange)',
+    accentColor: '#ff9f0a',
   },
 ];
 
@@ -64,8 +79,9 @@ export default function StudyHub() {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
       className="flex flex-col gap-6 pb-8"
+      style={{ padding: '24px', maxWidth: '960px', marginLeft: 'auto', marginRight: 'auto', width: '100%' }}
     >
       <AnimatePresence mode="wait">
         {!studyMode ? (
@@ -75,7 +91,7 @@ export default function StudyHub() {
             initial="initial"
             animate="animate"
             exit="exit"
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
             className="flex flex-col gap-6"
           >
             {/* Page header */}
@@ -111,47 +127,8 @@ export default function StudyHub() {
               </div>
             </div>
 
-            {/* Horizontal pill selector */}
-            <div
-              className="flex p-1"
-              style={{
-                backgroundColor: 'var(--bg-elevated)',
-                borderRadius: '14px',
-                border: '1px solid var(--bg-border)',
-              }}
-            >
-              {MODES.map((mode) => {
-                const Icon = mode.icon;
-                return (
-                  <button
-                    key={mode.id}
-                    onClick={() => setStudyMode(mode.id)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 text-sm font-medium transition-all duration-200"
-                    style={{
-                      borderRadius: '11px',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: 'var(--text-secondary)',
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.background =
-                        'var(--bg-overlay)';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.background =
-                        'none';
-                    }}
-                  >
-                    <Icon size={16} />
-                    <span>{mode.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
             {/* Mode cards */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3">
               {MODES.map((mode, i) => {
                 const Icon = mode.icon;
                 return (
@@ -160,17 +137,17 @@ export default function StudyHub() {
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{
-                      delay: i * 0.08,
+                      delay: i * 0.06,
                       duration: 0.4,
-                      ease: [0.22, 1, 0.36, 1],
+                      ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
                     }}
                     onClick={() => setStudyMode(mode.id)}
-                    className="flex items-center gap-4 w-full text-left transition-all duration-200"
+                    className="flex items-center gap-4 w-full text-left"
                     style={{
                       background: mode.gradient,
                       borderRadius: '16px',
                       border: `1px solid ${mode.accentColor}22`,
-                      padding: '20px',
+                      padding: '18px 20px',
                       cursor: 'pointer',
                     }}
                     whileHover={{ scale: 1.01, y: -1 }}
@@ -189,12 +166,30 @@ export default function StudyHub() {
                       <Icon size={24} style={{ color: mode.accentColor }} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3
-                        className="text-base font-semibold mb-0.5"
-                        style={{ color: 'var(--text-primary)' }}
-                      >
-                        {mode.label}
-                      </h3>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h3
+                          className="text-base font-semibold"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
+                          {mode.label}
+                        </h3>
+                        {mode.badge && (
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              backgroundColor: `${mode.accentColor}20`,
+                              color: mode.accentColor,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.04em',
+                            }}
+                          >
+                            {mode.badge}
+                          </span>
+                        )}
+                      </div>
                       <p
                         className="text-sm"
                         style={{ color: 'var(--text-secondary)' }}
@@ -233,7 +228,7 @@ export default function StudyHub() {
             initial="initial"
             animate="animate"
             exit="exit"
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
             className="flex flex-col gap-4"
           >
             {/* Back button */}
@@ -257,6 +252,11 @@ export default function StudyHub() {
 
             {/* Active study component */}
             <div>
+              {studyMode === 'guided' && (
+                <Suspense fallback={<div className="flex items-center justify-center" style={{ minHeight: '40vh' }}><div className="animate-spin" style={{ width: 32, height: 32, border: '3px solid rgba(255,255,255,0.08)', borderTopColor: '#4f8ef7', borderRadius: '50%' }} /></div>}>
+                  <GuidedSession />
+                </Suspense>
+              )}
               {studyMode === 'flashcard' && <FlashcardSession />}
               {studyMode === 'quiz' && <QuizSession />}
               {studyMode === 'speed' && <SpeedRound />}

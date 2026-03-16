@@ -49,7 +49,7 @@ interface AppStore {
 
   // UI state
   activeTab: 'home' | 'study' | 'analytics' | 'sources' | 'settings';
-  studyMode: 'flashcard' | 'quiz' | 'speed' | null;
+  studyMode: 'flashcard' | 'quiz' | 'speed' | 'guided' | null;
   showSessionComplete: boolean;
   toasts: { id: string; message: string; type: 'success' | 'error' | 'achievement' | 'xp'; icon?: string }[];
   showAITutor: boolean;

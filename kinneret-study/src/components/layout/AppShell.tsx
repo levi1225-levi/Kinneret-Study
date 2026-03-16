@@ -181,19 +181,21 @@ export default function AppShell() {
 
   return (
     <div
-      className="relative min-h-screen"
+      className="relative flex flex-col"
       style={{
         backgroundColor: '#0a0a0f',
         color: '#f0f0f5',
         fontFamily: "'DM Sans', sans-serif",
+        minHeight: '100vh',
       }}
     >
       {/* Main scrollable area */}
       <main
-        className="overflow-y-auto"
+        className="overflow-y-auto overflow-x-hidden"
         style={{
-          paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 16px)',
-          minHeight: '100vh',
+          paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
+          height: '100vh',
+          WebkitOverflowScrolling: 'touch',
         }}
       >
         <AnimatePresence mode="wait">
