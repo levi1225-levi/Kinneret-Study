@@ -72,7 +72,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   },
   {
     id: 'talmid-chacham',
-    title: 'Talmid Chacham',
+    title: 'Biology Expert',
     description: 'Master all cards in the study set',
     icon: '👑',
     condition: (data) => {
@@ -129,6 +129,53 @@ export const ACHIEVEMENTS: Achievement[] = [
         return hour >= 22;
       });
     },
+  },
+  {
+    id: 'streak-10',
+    title: 'On Fire',
+    description: 'Maintain a 10-day study streak',
+    icon: '🔥',
+    condition: (data) => (data.profile.streak ?? 0) >= 10,
+  },
+  {
+    id: 'streak-30',
+    title: 'Dedicated Scientist',
+    description: 'Maintain a 30-day study streak',
+    icon: '📚',
+    condition: (data) => (data.profile.streak ?? 0) >= 30,
+  },
+  {
+    id: 'streak-100',
+    title: 'Science Champion',
+    description: 'Maintain a 100-day study streak',
+    icon: '🏆',
+    condition: (data) => (data.profile.streak ?? 0) >= 100,
+  },
+  {
+    id: 'cards-100',
+    title: 'Century Club',
+    description: 'Master 100 cards',
+    icon: '💯',
+    condition: (data) => {
+      const mastered = Object.values(data.cardStates).filter(
+        (cs: any) => cs.difficulty === 'mastered',
+      ).length;
+      return mastered >= 100;
+    },
+  },
+  {
+    id: 'sessions-50',
+    title: 'Regular',
+    description: 'Complete 50 study sessions',
+    icon: '📅',
+    condition: (data) => (data.sessions?.length ?? 0) >= 50,
+  },
+  {
+    id: 'early-bird',
+    title: 'Early Bird',
+    description: 'Study before 7 AM',
+    icon: '🌅',
+    condition: () => new Date().getHours() < 7,
   },
 ];
 

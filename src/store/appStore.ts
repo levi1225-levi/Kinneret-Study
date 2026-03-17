@@ -145,10 +145,6 @@ function applyVisualSettings(settings: UserSettings): void {
   const fontScales: Record<string, string> = { small: '0.875', medium: '1', large: '1.125' };
   root.style.setProperty('--font-scale', fontScales[settings.fontSize] ?? '1');
 
-  // Hebrew font scale
-  const hebrewScales: Record<string, string> = { small: '0.85', medium: '1', large: '1.2' };
-  root.style.setProperty('--hebrew-scale', hebrewScales[settings.hebrewFontSize] ?? '1');
-
   // Animation speed
   if (settings.animationSpeed === 'none') {
     root.style.setProperty('--anim-duration', '0.01ms');
@@ -246,8 +242,41 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const speedSessions = data.sessions.filter((s) => s.mode === 'speed');
     const speedHighScore = speedSessions.reduce((max, s) => Math.max(max, s.correctCount), 0);
 
+    // Daily login streak check and bonus
+    const today = todayStr();
+    const lastDay = data.profile.lastStudyDate?.slice(0, 10) || '';
+
+    if (lastDay && !isSameDayStr(lastDay, today)) {
+      if (isYesterdayStr(lastDay)) {
+        // Consecutive day — increment streak and award daily XP bonus
+        const newStreak = (data.profile.streak || 0) + 1;
+        const dailyBonus = Math.min(50, 10 + newStreak * 2);
+        data.profile.streak = newStreak;
+        data.profile.xp = (data.profile.xp || 0) + dailyBonus;
+        if (newStreak > (data.profile.longestStreak || 0)) {
+          data.profile.longestStreak = newStreak;
+        }
+        data.profile.lastStudyDate = new Date().toISOString();
+        saveAppData(data);
+
+        // Notify after state is set
+        setTimeout(() => {
+          get().addToast({ message: `Daily login bonus: +${dailyBonus} XP`, type: 'xp' });
+        }, 300);
+
+        if (newStreak > 0 && newStreak % 7 === 0) {
+          setTimeout(() => {
+            get().addToast({ message: `🔥 ${newStreak}-day streak! Keep it up!`, type: 'success' });
+          }, 800);
+        }
+      } else {
+        // More than 1 day gap — reset streak
+        data.profile.streak = 0;
+        saveAppData(data);
+      }
+    }
+
     set({ data, initialized: true, speedHighScore });
-    get().updateStreak();
   },
 
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -401,7 +430,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const newProfile = {
       ...data.profile,
       xp: data.profile.xp + bonusXP,
-      lastStudyDate: new Date().toISOString(),
+      lastStudyDate: todayStr(),
       totalStudyTime: data.profile.totalStudyTime + Math.round(totalTime / 60000),
     };
 
@@ -409,9 +438,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const today = todayStr();
     const lastStudyDay = data.profile.lastStudyDate?.slice(0, 10) || '';
     if (lastStudyDay !== today) {
-      newProfile.streak = (newProfile.streak || 0) + 1;
-      if (newProfile.streak > newProfile.longestStreak) {
-        newProfile.longestStreak = newProfile.streak;
+      const newStreak = (newProfile.streak || 0) + 1;
+      newProfile.streak = newStreak;
+      if (newStreak > (newProfile.longestStreak || 0)) {
+        newProfile.longestStreak = newStreak;
+      }
+
+      // Streak milestone toast every 7 days
+      if (newStreak > 0 && newStreak % 7 === 0) {
+        setTimeout(() => {
+          get().addToast({ message: `🔥 ${newStreak}-day streak! Keep it up!`, type: 'success' });
+        }, 500);
       }
     }
 
